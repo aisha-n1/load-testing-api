@@ -32,13 +32,24 @@ orders_db = []
 out_of_stock_attempts = 0
 
 def initialize_products():
-    """Initialize or RESET products to starting state"""
+    """Initialize or RESET products to starting state, aiming for <= 30 low stock."""
     global products_db
     products_db = {}
     
     print("🔄 Initializing product catalog...")
+    
+    # We have 100 products. We want <= 30 to be 'low stock' (stock <= 10).
+    max_low_stock_count = 30
+    
     for i in range(1, 101):
-        initial_stock = random.randint(10, 50)  # Start with 10-50 items
+        # 30% chance for a low stock product, otherwise a normal stock product
+        if i <= max_low_stock_count:
+            # Low Stock (5 to 10 items)
+            initial_stock = random.randint(5, 10)
+        else:
+            # Normal Stock (11 to 50 items) - Adjusted lower bound to ensure they aren't 'low stock'
+            initial_stock = random.randint(11, 50)
+            
         products_db[i] = {
             "id": i,
             "name": f"Product {i}",
@@ -322,7 +333,7 @@ DASHBOARD_HTML = """
                             <div class="stock-bar">
                                 {% set percentage = (product.stock / product.initial_stock * 100) if product.initial_stock > 0 else 0 %}
                                 <div class="stock-fill {% if product.stock == 0 %}out{% elif percentage < 30 %}low{% endif %}" 
-                                     style="width: {{ percentage }}%"></div>
+                                    style="width: {{ percentage }}%"></div>
                             </div>
                             <small style="color: #666;">{{ product.stock }}/{{ product.initial_stock }}</small>
                         </td>
