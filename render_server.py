@@ -32,22 +32,23 @@ orders_db = []
 out_of_stock_attempts = 0
 
 def initialize_products():
-    """Initialize or RESET products to starting state, aiming for <= 30 low stock."""
+    """Initialize or RESET products to starting state, ensuring <= 30 low stock."""
     global products_db
     products_db = {}
     
     print("🔄 Initializing product catalog...")
     
-    # We have 100 products. We want <= 30 to be 'low stock' (stock <= 10).
-    max_low_stock_count = 30
+    # Randomly choose a number of products (between 5 and 30) to start with low stock
+    target_low_stock_count = random.randint(5, 30) 
+    
+    low_stock_ids = random.sample(range(1, 101), target_low_stock_count)
     
     for i in range(1, 101):
-        # 30% chance for a low stock product, otherwise a normal stock product
-        if i <= max_low_stock_count:
+        if i in low_stock_ids:
             # Low Stock (5 to 10 items)
             initial_stock = random.randint(5, 10)
         else:
-            # Normal Stock (11 to 50 items) - Adjusted lower bound to ensure they aren't 'low stock'
+            # Normal Stock (11 to 50 items)
             initial_stock = random.randint(11, 50)
             
         products_db[i] = {
@@ -59,11 +60,10 @@ def initialize_products():
             "category": random.choice(["Electronics", "Clothing", "Books", "Home"]),
             "times_purchased": 0
         }
-    print(f"✅ Created {len(products_db)} products")
+    print(f"✅ Created {len(products_db)} products. {target_low_stock_count} products started low.")
 
 # Initialize on startup
-initialize_products()
-
+initialize_products() 
 # ============================================================================
 # DASHBOARD HTML - WITH RESET BUTTON!
 # ============================================================================
@@ -707,3 +707,4 @@ if __name__ == '__main__':
     print(f"🔄 Reset available at: /api/admin/reset (POST)")
     print("=" * 70)
     app.run(debug=False, host='0.0.0.0', port=PORT)
+
