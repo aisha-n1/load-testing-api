@@ -1,16 +1,13 @@
-# render_server.py - Production-Ready API for Cloud Deployment
+# render_server.py - WITH RESET FUNCTIONALITY
 """
-E-Commerce Load Testing API - Cloud Optimized with Dashboard
-=============================================================
-COMPLETE version for Render.com/Heroku deployment
-Includes BOTH API endpoints AND beautiful dashboard!
+E-Commerce Load Testing API with RESET button!
+=====================================================
+- Run load tests
+- Stock depletes, orders created
+- Click RESET button to restore everything
+- Perfect for demos and presentations!
 
-Deploy to: Render.com (Free) or Heroku ($7/month)
-URL: https://your-app.onrender.com
-Dashboard: https://your-app.onrender.com/dashboard
-
-Author: [Your Name]
-Project: Multi-Tool Performance Testing Suite
+🔄 Reset endpoint: /api/admin/reset (POST)
 """
 
 from flask import Flask, jsonify, request, render_template_string
@@ -21,40 +18,43 @@ from datetime import datetime
 import threading
 import time
 
-# Create Flask app
 app = Flask(__name__)
-CORS(app)  # Allow cross-origin requests
+CORS(app)
 
-# Get port from environment (cloud platforms provide this)
 PORT = int(os.environ.get("PORT", 5000))
-
-# Thread lock for thread-safe operations
 stock_lock = threading.Lock()
 
-# In-memory storage (resets on restart - that's okay for demo!)
+# Storage
 users_db = {}
 products_db = {}
 carts_db = {}
 orders_db = []
 out_of_stock_attempts = 0
 
-# Initialize 100 products on startup
-print("🚀 Initializing product catalog...")
-for i in range(1, 101):
-    initial_stock = random.randint(5, 50)
-    products_db[i] = {
-        "id": i,
-        "name": f"Product {i}",
-        "price": round(random.uniform(10, 500), 2),
-        "stock": initial_stock,
-        "initial_stock": initial_stock,
-        "category": random.choice(["Electronics", "Clothing", "Books", "Home"]),
-        "times_purchased": 0
-    }
-print(f"✅ Created {len(products_db)} products")
+def initialize_products():
+    """Initialize or RESET products to starting state"""
+    global products_db
+    products_db = {}
+    
+    print("🔄 Initializing product catalog...")
+    for i in range(1, 101):
+        initial_stock = random.randint(10, 50)  # Start with 10-50 items
+        products_db[i] = {
+            "id": i,
+            "name": f"Product {i}",
+            "price": round(random.uniform(10, 500), 2),
+            "stock": initial_stock,
+            "initial_stock": initial_stock,
+            "category": random.choice(["Electronics", "Clothing", "Books", "Home"]),
+            "times_purchased": 0
+        }
+    print(f"✅ Created {len(products_db)} products")
+
+# Initialize on startup
+initialize_products()
 
 # ============================================================================
-# DASHBOARD HTML - THE BEAUTIFUL WEB INTERFACE!
+# DASHBOARD HTML - WITH RESET BUTTON!
 # ============================================================================
 
 DASHBOARD_HTML = """
@@ -66,16 +66,13 @@ DASHBOARD_HTML = """
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <style>
         * { margin: 0; padding: 0; box-sizing: border-box; }
-        
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
             color: #333;
             padding: 20px;
         }
-        
         .container { max-width: 1400px; margin: 0 auto; }
-        
         header {
             background: white;
             padding: 30px;
@@ -83,10 +80,9 @@ DASHBOARD_HTML = """
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
             margin-bottom: 30px;
             text-align: center;
+            position: relative;
         }
-        
         h1 { color: #667eea; font-size: 2.5em; margin-bottom: 10px; }
-        
         .status {
             display: inline-block;
             background: #10b981;
@@ -96,30 +92,52 @@ DASHBOARD_HTML = """
             font-weight: bold;
             margin: 10px 5px;
         }
-        
         .status.warning { background: #f59e0b; }
-        
+        .cloud-badge {
+            background: #4f46e5;
+            color: white;
+            padding: 5px 15px;
+            border-radius: 20px;
+            font-size: 0.9em;
+            margin-left: 10px;
+        }
+        .reset-btn {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: #ef4444;
+            color: white;
+            border: none;
+            padding: 12px 25px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1em;
+            font-weight: bold;
+            transition: all 0.3s;
+        }
+        .reset-btn:hover {
+            background: #dc2626;
+            transform: scale(1.05);
+            box-shadow: 0 5px 15px rgba(239, 68, 68, 0.4);
+        }
         .grid {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
             gap: 20px;
             margin-bottom: 30px;
         }
-        
         .card {
             background: white;
             padding: 25px;
             border-radius: 15px;
             box-shadow: 0 5px 15px rgba(0,0,0,0.1);
         }
-        
         .card h2 {
             color: #667eea;
             margin-bottom: 15px;
             border-bottom: 3px solid #667eea;
             padding-bottom: 10px;
         }
-        
         .stat {
             font-size: 3em;
             font-weight: bold;
@@ -127,36 +145,29 @@ DASHBOARD_HTML = """
             text-align: center;
             margin: 20px 0;
         }
-        
         .stat.warning { color: #f59e0b; }
         .stat.danger { color: #ef4444; }
-        
         .label {
             text-align: center;
             color: #666;
             font-size: 1.1em;
         }
-        
         table {
             width: 100%;
             border-collapse: collapse;
             margin-top: 15px;
         }
-        
         th {
             background: #667eea;
             color: white;
             padding: 12px;
             text-align: left;
         }
-        
         td {
             padding: 10px;
             border-bottom: 1px solid #eee;
         }
-        
         tr:hover { background: #f8f9fa; }
-        
         .badge {
             display: inline-block;
             padding: 5px 12px;
@@ -164,12 +175,9 @@ DASHBOARD_HTML = """
             font-size: 0.85em;
             font-weight: bold;
         }
-        
         .badge-success { background: #d1fae5; color: #065f46; }
         .badge-warning { background: #fef3c7; color: #92400e; }
         .badge-danger { background: #fee2e2; color: #991b1b; }
-        .badge-info { background: #dbeafe; color: #1e40af; }
-        
         .stock-bar {
             width: 100%;
             height: 8px;
@@ -178,16 +186,13 @@ DASHBOARD_HTML = """
             overflow: hidden;
             margin-top: 5px;
         }
-        
         .stock-fill {
             height: 100%;
             background: #10b981;
             transition: width 0.3s;
         }
-        
         .stock-fill.low { background: #f59e0b; }
         .stock-fill.out { background: #ef4444; width: 100% !important; }
-        
         button {
             background: #667eea;
             color: white;
@@ -199,13 +204,11 @@ DASHBOARD_HTML = """
             margin: 5px;
             transition: all 0.3s;
         }
-        
         button:hover {
             background: #5568d3;
             transform: translateY(-2px);
             box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
         }
-        
         .alert {
             background: #fef3c7;
             border-left: 4px solid #f59e0b;
@@ -213,25 +216,20 @@ DASHBOARD_HTML = """
             margin: 15px 0;
             border-radius: 8px;
         }
-        
         .alert.danger {
             background: #fee2e2;
             border-left-color: #ef4444;
         }
-        
-        .cloud-badge {
-            background: #4f46e5;
-            color: white;
-            padding: 5px 15px;
-            border-radius: 20px;
-            font-size: 0.9em;
-            margin-left: 10px;
+        .alert.success {
+            background: #d1fae5;
+            border-left-color: #10b981;
         }
     </style>
 </head>
 <body>
     <div class="container">
         <header>
+            <button class="reset-btn" onclick="resetSystem()">🔄 RESET SYSTEM</button>
             <h1>🛒 E-Commerce API Dashboard <span class="cloud-badge">☁️ LIVE</span></h1>
             <div class="status">● Server Online</div>
             {% if low_stock_count > 0 %}
@@ -241,9 +239,11 @@ DASHBOARD_HTML = """
             <div class="status warning">❌ {{ out_of_stock_count }} Products Out of Stock</div>
             {% endif %}
             <p style="margin-top: 15px; color: #666;">
-                Live view with REAL stock management - Deployed on Cloud ☁️
+                Live view with REAL stock management - Click RESET to restore inventory
             </p>
         </header>
+        
+        <div id="alert-area"></div>
         
         {% if out_of_stock_attempts > 0 %}
         <div class="alert danger">
@@ -290,7 +290,7 @@ DASHBOARD_HTML = """
         </div>
         
         <div class="card">
-            <h2>📊 Stock Status (First 20 Products - <a href="/api/stats" style="color: #667eea;">View All Stats</a>)</h2>
+            <h2>📊 Stock Status (First 20 Products)</h2>
             <div style="max-height: 600px; overflow-y: auto;">
             <table>
                 <thead style="position: sticky; top: 0; background: white; z-index: 10;">
@@ -397,30 +397,50 @@ DASHBOARD_HTML = """
     </div>
     
     <script>
-        // Auto-refresh every 5 seconds to show live updates
+        // Auto-refresh every 5 seconds
         setTimeout(() => location.reload(), 5000);
+        
+        // Reset system function
+        async function resetSystem() {
+            if (!confirm('Reset the entire system? This will:\\n\\n✓ Restore all product stock\\n✓ Clear all orders\\n✓ Clear all carts\\n✓ Clear all sessions\\n\\nContinue?')) {
+                return;
+            }
+            
+            const alertArea = document.getElementById('alert-area');
+            alertArea.innerHTML = '<div class="alert">⏳ Resetting system...</div>';
+            
+            try {
+                const response = await fetch('/api/admin/reset', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    }
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    alertArea.innerHTML = '<div class="alert success">✅ ' + data.message + '</div>';
+                    setTimeout(() => location.reload(), 1500);
+                } else {
+                    alertArea.innerHTML = '<div class="alert danger">❌ Reset failed: ' + data.message + '</div>';
+                }
+            } catch (error) {
+                alertArea.innerHTML = '<div class="alert danger">❌ Error: ' + error.message + '</div>';
+            }
+        }
     </script>
 </body>
 </html>
 """
 
-# ============================================================================
-# DASHBOARD ROUTE
-# ============================================================================
-
 @app.route('/dashboard')
 def dashboard():
-    """
-    Beautiful web dashboard showing all data in real-time
-    This works perfectly in the cloud!
-    """
-    
-    # Calculate statistics
+    """Dashboard with reset button"""
     in_stock = sum(1 for p in products_db.values() if p['stock'] > 10)
     low_stock = sum(1 for p in products_db.values() if 0 < p['stock'] <= 10)
     out_of_stock = sum(1 for p in products_db.values() if p['stock'] == 0)
     
-    # Prepare cart data
     carts_data = []
     for username, cart in carts_db.items():
         total = sum(item['price'] * item['quantity'] for item in cart)
@@ -430,7 +450,6 @@ def dashboard():
             'total': total
         })
     
-    # Render the beautiful HTML template
     return render_template_string(
         DASHBOARD_HTML,
         products_count=len(products_db),
@@ -440,102 +459,111 @@ def dashboard():
         active_users=len(users_db),
         carts_count=len(carts_db),
         orders_count=len(orders_db),
-        sample_products=list(products_db.values())[:20],  # First 20 for display
+        sample_products=list(products_db.values())[:20],
         carts_data=carts_data,
         recent_orders=orders_db[-10:] if orders_db else [],
         out_of_stock_attempts=out_of_stock_attempts
     )
 
 # ============================================================================
-# HEALTH & INFO ENDPOINTS
+# RESET ENDPOINT - THE MAGIC BUTTON!
+# ============================================================================
+
+@app.route('/api/admin/reset', methods=['POST'])
+def reset_system():
+    """
+    RESET endpoint - Restores everything to initial state
+    Perfect for demos and presentations!
+    """
+    global users_db, carts_db, orders_db, out_of_stock_attempts
+    
+    try:
+        with stock_lock:
+            # Reinitialize products (fresh stock!)
+            initialize_products()
+            
+            # Clear everything else
+            users_db = {}
+            carts_db = {}
+            orders_db = []
+            out_of_stock_attempts = 0
+        
+        return jsonify({
+            "success": True,
+            "message": "System reset successfully! All stock restored, orders cleared.",
+            "stats": {
+                "products": len(products_db),
+                "users": len(users_db),
+                "carts": len(carts_db),
+                "orders": len(orders_db)
+            }
+        }), 200
+        
+    except Exception as e:
+        return jsonify({
+            "success": False,
+            "message": str(e)
+        }), 500
+
+# ============================================================================
+# ALL YOUR OTHER ENDPOINTS (same as before)
 # ============================================================================
 
 @app.route('/health')
 def health():
-    """Health check endpoint - required by most cloud platforms"""
     return jsonify({
         "status": "healthy",
         "products": len(products_db),
-        "orders": len(orders_db),
-        "timestamp": datetime.now().isoformat()
+        "orders": len(orders_db)
     }), 200
 
 @app.route('/')
 def homepage():
-    """Homepage - shows API information"""
     return jsonify({
         "message": "🛒 E-Commerce Load Testing API",
-        "version": "2.0",
+        "version": "2.0 - WITH RESET!",
         "status": "online",
-        "description": "Production-ready REST API for performance testing",
         "endpoints": {
+            "dashboard": "/dashboard (WITH RESET BUTTON!)",
+            "reset": "/api/admin/reset (POST)",
             "health": "/health",
             "products": "/api/products",
-            "product_detail": "/api/products/<id>",
-            "search": "/api/search?q=<query>",
             "login": "/api/auth/login (POST)",
-            "cart": "/api/cart (GET/POST)",
+            "cart": "/api/cart",
             "checkout": "/api/checkout (POST)"
         },
         "statistics": {
             "total_products": len(products_db),
             "in_stock": sum(1 for p in products_db.values() if p['stock'] > 0),
-            "out_of_stock": sum(1 for p in products_db.values() if p['stock'] == 0),
-            "total_orders": len(orders_db),
-            "active_users": len(users_db),
-            "active_carts": len(carts_db)
-        },
-        "github": "https://github.com/yourusername/load-testing-suite",
-        "author": "[Your Name]"
+            "total_orders": len(orders_db)
+        }
     }), 200
-
-# ============================================================================
-# AUTHENTICATION
-# ============================================================================
 
 @app.route('/api/auth/login', methods=['POST'])
 def login():
-    """User login - returns auth token"""
-    time.sleep(random.uniform(0.1, 0.3))  # Simulate processing
-    
+    time.sleep(random.uniform(0.1, 0.3))
     data = request.get_json() or {}
     username = data.get('username', 'guest')
-    
-    # Generate unique token
     token = f"token_{username}_{int(time.time())}_{random.randint(1000,9999)}"
-    
-    # Store session
     users_db[token] = {
         "username": username,
         "login_time": datetime.now().isoformat()
     }
-    
     return jsonify({
         "success": True,
         "token": token,
-        "username": username,
-        "message": "Login successful"
+        "username": username
     }), 200
-
-# ============================================================================
-# PRODUCTS
-# ============================================================================
 
 @app.route('/api/products')
 def list_products():
-    """List products with pagination"""
     time.sleep(random.uniform(0.1, 0.3))
-    
     page = int(request.args.get('page', 1))
     per_page = int(request.args.get('per_page', 20))
-    
     start = (page - 1) * per_page
     end = start + per_page
-    
-    product_list = list(products_db.values())[start:end]
-    
     return jsonify({
-        "products": product_list,
+        "products": list(products_db.values())[start:end],
         "page": page,
         "per_page": per_page,
         "total": len(products_db)
@@ -543,133 +571,62 @@ def list_products():
 
 @app.route('/api/products/<int:product_id>')
 def get_product(product_id):
-    """Get specific product by ID"""
     time.sleep(random.uniform(0.05, 0.15))
-    
     if product_id in products_db:
         product = products_db[product_id].copy()
-        
-        # Add availability status
-        if product['stock'] == 0:
-            product['available'] = False
-            product['status'] = 'Out of Stock'
-        elif product['stock'] < 10:
-            product['available'] = True
-            product['status'] = 'Low Stock'
-        else:
-            product['available'] = True
-            product['status'] = 'In Stock'
-        
+        product['available'] = product['stock'] > 0
+        product['status'] = 'In Stock' if product['stock'] > 10 else ('Low Stock' if product['stock'] > 0 else 'Out of Stock')
         return jsonify(product), 200
-    else:
-        return jsonify({"error": "Product not found"}), 404
+    return jsonify({"error": "Product not found"}), 404
 
 @app.route('/api/search')
 def search_products():
-    """Search products by keyword"""
     time.sleep(random.uniform(0.15, 0.4))
-    
     query = request.args.get('q', '').lower()
-    
     if not query:
-        return jsonify({"error": "No search query provided"}), 400
-    
-    # Search in name and category, only in-stock items
-    results = [
-        product for product in products_db.values()
-        if (query in product['name'].lower() or query in product['category'].lower())
-        and product['stock'] > 0
-    ]
-    
-    return jsonify({
-        "query": query,
-        "results": results[:20],
-        "count": len(results)
-    }), 200
-
-# ============================================================================
-# SHOPPING CART
-# ============================================================================
+        return jsonify({"error": "No search query"}), 400
+    results = [p for p in products_db.values() if query in p['name'].lower() or query in p['category'].lower() and p['stock'] > 0]
+    return jsonify({"query": query, "results": results[:20], "count": len(results)}), 200
 
 def get_user_from_token(token):
-    """Extract username from auth token"""
     token = token.replace('Bearer ', '')
     user_info = users_db.get(token)
     return user_info['username'] if user_info else None
 
 @app.route('/api/cart', methods=['GET'])
 def get_cart():
-    """View shopping cart"""
     time.sleep(random.uniform(0.05, 0.1))
-    
     token = request.headers.get('Authorization', '')
     username = get_user_from_token(token)
-    
     if not username:
         return jsonify({"error": "Unauthorized"}), 401
-    
     cart = carts_db.get(username, [])
     total = sum(item['price'] * item['quantity'] for item in cart)
-    
-    return jsonify({
-        "cart": cart,
-        "items_count": len(cart),
-        "total": round(total, 2)
-    }), 200
+    return jsonify({"cart": cart, "items_count": len(cart), "total": round(total, 2)}), 200
 
 @app.route('/api/cart/add', methods=['POST'])
 def add_to_cart():
-    """Add item to cart with stock validation"""
     global out_of_stock_attempts
-    
     time.sleep(random.uniform(0.1, 0.2))
-    
     token = request.headers.get('Authorization', '')
     username = get_user_from_token(token)
-    
     if not username:
         return jsonify({"error": "Unauthorized"}), 401
-    
     data = request.get_json() or {}
     product_id = data.get('product_id')
     quantity = data.get('quantity', 1)
-    
     if product_id not in products_db:
         return jsonify({"error": "Product not found"}), 404
-    
-    # STOCK VALIDATION - Thread-safe
     with stock_lock:
         product = products_db[product_id]
-        
         if product['stock'] < quantity:
             out_of_stock_attempts += 1
-            return jsonify({
-                "error": "Insufficient stock",
-                "message": f"Only {product['stock']} items available",
-                "requested": quantity,
-                "available": product['stock']
-            }), 400
-    
-    # Add to cart
+            return jsonify({"error": "Insufficient stock", "available": product['stock']}), 400
     if username not in carts_db:
         carts_db[username] = []
-    
-    # Check if product already in cart
-    existing_item = None
-    for item in carts_db[username]:
-        if item['product_id'] == product_id:
-            existing_item = item
-            break
-    
-    if existing_item:
-        new_quantity = existing_item['quantity'] + quantity
-        if new_quantity > product['stock']:
-            out_of_stock_attempts += 1
-            return jsonify({
-                "error": "Insufficient stock",
-                "message": f"Cart has {existing_item['quantity']}, only {product['stock']} available total"
-            }), 400
-        existing_item['quantity'] += quantity
+    existing = next((item for item in carts_db[username] if item['product_id'] == product_id), None)
+    if existing:
+        existing['quantity'] += quantity
     else:
         carts_db[username].append({
             "product_id": product_id,
@@ -677,189 +634,65 @@ def add_to_cart():
             "price": product['price'],
             "quantity": quantity
         })
-    
-    return jsonify({
-        "message": "Item added to cart",
-        "cart_items": len(carts_db[username])
-    }), 201
-
-# ============================================================================
-# CHECKOUT
-# ============================================================================
+    return jsonify({"message": "Added to cart", "cart_items": len(carts_db[username])}), 201
 
 @app.route('/api/checkout', methods=['POST'])
 def checkout():
-    """Process checkout and reduce stock"""
     time.sleep(random.uniform(0.3, 0.8))
-    
     token = request.headers.get('Authorization', '')
     username = get_user_from_token(token)
-    
     if not username:
         return jsonify({"error": "Unauthorized"}), 401
-    
     cart = carts_db.get(username, [])
-    
     if not cart:
         return jsonify({"error": "Cart is empty"}), 400
-    
-    data = request.get_json() or {}
-    payment_method = data.get('payment_method', 'credit_card')
-    shipping_address = data.get('shipping_address', 'Not provided')
-    
-    # FINAL STOCK CHECK AND REDUCTION - Thread-safe
     with stock_lock:
-        # Verify all items still in stock
         for item in cart:
-            product_id = item['product_id']
-            quantity = item['quantity']
-            
-            if product_id not in products_db:
-                return jsonify({
-                    "error": "Product no longer available",
-                    "product_id": product_id
-                }), 400
-            
-            if products_db[product_id]['stock'] < quantity:
-                return jsonify({
-                    "error": "Insufficient stock during checkout",
-                    "message": f"Product {product_id} only has {products_db[product_id]['stock']} left",
-                    "product_id": product_id
-                }), 400
-        
-        # All items available - reduce stock now
+            if products_db[item['product_id']]['stock'] < item['quantity']:
+                return jsonify({"error": "Insufficient stock"}), 400
         for item in cart:
-            product_id = item['product_id']
-            quantity = item['quantity']
-            products_db[product_id]['stock'] -= quantity
-            products_db[product_id]['times_purchased'] += 1
-    
-    # Calculate total
+            products_db[item['product_id']]['stock'] -= item['quantity']
+            products_db[item['product_id']]['times_purchased'] += 1
     total = sum(item['price'] * item['quantity'] for item in cart)
-    
-    # Simulate payment processing (5% failure rate)
     if random.random() < 0.05:
-        # Payment failed - restore stock
         with stock_lock:
             for item in cart:
                 products_db[item['product_id']]['stock'] += item['quantity']
-        
-        return jsonify({
-            "error": "Payment processing failed",
-            "message": "Please try again"
-        }), 500
-    
-    # Success - create order
+        return jsonify({"error": "Payment failed"}), 500
     order_id = f"ORDER_{username}_{int(time.time())}"
-    
-    order_items = []
-    for item in cart:
-        order_items.append({
-            "product_id": item['product_id'],
-            "name": item['name'],
-            "quantity": item['quantity'],
-            "price": item['price']
-        })
-    
     orders_db.append({
         "order_id": order_id,
         "username": username,
         "total": round(total, 2),
         "items_count": len(cart),
-        "items": order_items,
-        "payment_method": payment_method,
-        "shipping_address": shipping_address,
         "timestamp": datetime.now().isoformat()
     })
-    
-    # Clear cart
     carts_db[username] = []
-    
-    return jsonify({
-        "success": True,
-        "order_id": order_id,
-        "total": round(total, 2),
-        "items_purchased": len(order_items),
-        "payment_method": payment_method,
-        "shipping_address": shipping_address,
-        "estimated_delivery": "3-5 business days",
-        "message": "Order placed successfully!"
-    }), 200
-
-# ============================================================================
-# ADDITIONAL ENDPOINTS
-# ============================================================================
-
-@app.route('/api/user/<int:user_id>')
-def get_user(user_id):
-    """Get user information (fake data for testing)"""
-    time.sleep(random.uniform(0.05, 0.15))
-    
-    return jsonify({
-        "id": user_id,
-        "username": f"user_{user_id}",
-        "email": f"user_{user_id}@example.com",
-        "joined": "2024-01-01",
-        "orders_count": random.randint(0, 50)
-    }), 200
+    return jsonify({"success": True, "order_id": order_id, "total": round(total, 2)}), 200
 
 @app.route('/api/stats')
 def get_stats():
-    """Get system statistics - useful for monitoring"""
     return jsonify({
         "products": {
             "total": len(products_db),
             "in_stock": sum(1 for p in products_db.values() if p['stock'] > 0),
-            "low_stock": sum(1 for p in products_db.values() if 0 < p['stock'] <= 10),
             "out_of_stock": sum(1 for p in products_db.values() if p['stock'] == 0)
         },
         "orders": {
-            "total": len(orders_db),
-            "total_revenue": sum(order['total'] for order in orders_db)
+            "total": len(orders_db)
         },
         "users": {
-            "active_sessions": len(users_db),
-            "active_carts": len(carts_db)
-        },
-        "validation": {
-            "blocked_attempts": out_of_stock_attempts
+            "active": len(users_db),
+            "carts": len(carts_db)
         }
     }), 200
 
-# ============================================================================
-# ERROR HANDLERS
-# ============================================================================
-
-@app.errorhandler(404)
-def not_found(error):
-    """Handle 404 errors"""
-    return jsonify({
-        "error": "Not Found",
-        "message": "The requested resource was not found"
-    }), 404
-
-@app.errorhandler(500)
-def internal_error(error):
-    """Handle 500 errors"""
-    return jsonify({
-        "error": "Internal Server Error",
-        "message": "Something went wrong on our end"
-    }), 500
-
-# ============================================================================
-# START SERVER
-# ============================================================================
-
 if __name__ == '__main__':
     print("=" * 70)
-    print("🚀 E-Commerce Load Testing API - Production Mode")
+    print("🚀 E-Commerce Load Testing API - WITH RESET!")
     print("=" * 70)
     print(f"📍 Port: {PORT}")
     print(f"📦 Products: {len(products_db)}")
-    print(f"🌐 Ready to accept requests!")
+    print(f"🔄 Reset available at: /api/admin/reset (POST)")
     print("=" * 70)
-    
-    # Run server
-    # debug=False for production
-    # host='0.0.0.0' to accept external requests
     app.run(debug=False, host='0.0.0.0', port=PORT)
